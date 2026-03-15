@@ -1,0 +1,20 @@
+# Google APIs
+google-api-python-client==2.114.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.0
+
+# Gemini AI — new SDK + legacy (for compatibility)
+google-genai>=1.0.0
+google-generativeai==0.8.0
+
+# Image processing (thumbnails)
+Pillow==10.4.0
+
+# Audio metadata extraction
+mutagen==1.47.0
+
+# Environment variables
+python-dotenv==1.0.1
+
+# Audio waveform processing
+numpy==1.26.4

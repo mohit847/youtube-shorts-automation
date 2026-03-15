@@ -1,0 +1,82 @@
+name: Auto Upload YouTube Shorts
+
+on:
+  schedule:
+    # Run at 6:00 AM UTC (11:30 AM IST) and 6:00 PM UTC (11:30 PM IST)
+    - cron: '0 6 * * *'   # Morning
+    - cron: '0 18 * * *'  # Evening
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  upload-video:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+        
+    - name: Install Python dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Create credentials directory
+      run: mkdir -p credentials
+        
+    - name: Setup Google credentials
+      env:
+        CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+        TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN }}
+      run: |
+        echo "$CLIENT_SECRET" > credentials/client_secret.json
+        echo "$TOKEN_JSON" > credentials/token.json
+        
+    - name: Create .env file
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        DRIVE_PROCESSED_FOLDER_ID: ${{ secrets.DRIVE_PROCESSED_FOLDER_ID }}
+      run: |
+        cat > .env << EOF
+        GEMINI_API_KEY=$GEMINI_API_KEY
+        CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID
+        CLOUDFLARE_API_TOKEN=$CLOUDFLARE_API_TOKEN
+        DRIVE_FOLDER_ID=$DRIVE_FOLDER_ID
+        DRIVE_PROCESSED_FOLDER_ID=$DRIVE_PROCESSED_FOLDER_ID
+        YOUTUBE_CLIENT_SECRET_PATH=credentials/client_secret.json
+        DEFAULT_PRIVACY=public
+        UPLOAD_CATEGORY_ID=10
+        MAX_VIDEO_DURATION=59
+        INTRO_SKIP_SECONDS=10
+        WATERMARK_TEXT=Musiqstar
+        CHANNEL_NAME=Musiqstar
+        SECONDS_PER_IMAGE=3
+        MIN_IMAGES=4
+        MAX_IMAGES=15
+        CTA_TEXT=Like & Subscribe 🩷👍
+        CTA_DURATION=5
+        EOF
+        
+    - name: Run automation
+      run: python main.py
+      
+    - name: Upload artifacts (if failed)
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: debug-logs
+        path: |
+          output/
+          *.log
