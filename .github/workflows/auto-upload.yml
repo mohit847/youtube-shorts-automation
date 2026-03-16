@@ -2,9 +2,15 @@ name: Auto Upload YouTube Shorts
 
 on:
   schedule:
-    # Run at 6:00 AM UTC (11:30 AM IST) and 6:00 PM UTC (11:30 PM IST)
-    - cron: '0 6 * * *'   # Morning
-    - cron: '0 18 * * *'  # Evening
+    # Weekdays (Mon-Fri): 7:00 PM IST = 1:30 PM UTC
+    - cron: '30 13 * * 1-5'
+    
+    # Weekends (Sat-Sun): 8:00 AM IST = 2:30 AM UTC
+    - cron: '30 2 * * 0,6'
+    
+    # Weekends (Sat-Sun): 6:00 PM IST = 12:30 PM UTC
+    - cron: '30 12 * * 0,6'
+    
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
