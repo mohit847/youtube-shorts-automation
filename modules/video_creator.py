@@ -62,13 +62,30 @@ def get_audio_metadata(audio_path):
 
 
 def _esc(text):
-    """Escape text for FFmpeg drawtext."""
-    text = text.replace("\\", "\\\\\\\\")
-    text = text.replace(":", "\\\\:")
-    text = text.replace("'", "\\\\\\'")
-    text = text.replace("%", "%%")
+    """
+    Escape text for FFmpeg drawtext filter.
+    Handles special characters and ensures proper UTF-8 encoding.
+    """
+    # Ensure text is a string
+    if not isinstance(text, str):
+        text = str(text)
+    
+    # Log original text for debugging
+    print(f"       _esc input: {repr(text[:50])}")
+    
+    # FFmpeg drawtext requires specific escaping
+    text = text.replace("\\", "\\\\\\\\")  # Backslash
+    text = text.replace(":", "\\\\:")      # Colon
+    text = text.replace("'", "\\\\\\'")    # Single quote
+    text = text.replace("%", "%%")         # Percent
+    
+    # Remove problematic characters that can break FFmpeg filters
     for ch in ";[]{}":
         text = text.replace(ch, "")
+    
+    # Log escaped text
+    print(f"       _esc output: {repr(text[:50])}")
+    
     return text
 
 
@@ -107,9 +124,17 @@ def create_visualizer_video(audio_path, output_path=None, metadata=None,
     timed_lyrics = []
     if analysis:
         timed_lyrics = analysis.get("timed_lyrics", [])
+        print(f"\n  📝 Lyrics Analysis:")
+        print(f"     Timed lyrics count: {len(timed_lyrics)}")
+        if timed_lyrics:
+            print(f"     First lyric: {repr(timed_lyrics[0])}")
+            if len(timed_lyrics) > 1:
+                print(f"     Second lyric: {repr(timed_lyrics[1])}")
+    
     # If no timed lyrics, fallback to simple string lines
     if not timed_lyrics and analysis:
         lyrics_text = analysis.get("lyrics", "")
+        print(f"     Fallback to lyrics text: {repr(lyrics_text[:100])}...")
         if lyrics_text and lyrics_text != "Instrumental or lyrics unavailable":
             raw_lines = lyrics_text.replace("\r\n", "\n").split("\n")
             timed_lyrics = [{"text": l.strip()} for l in raw_lines if l.strip()]
@@ -175,8 +200,10 @@ def _build_lyric_caption_filters(timed_lyrics, video_duration, input_label, outp
     """
     if not timed_lyrics:
         # No captions — just pass through
+        print("  ⚠️  No lyrics provided for captions")
         return [f"[{input_label}]null[{output_label}]"]
 
+    print(f"\n  📝 Building captions for {len(timed_lyrics)} lyric lines...")
     filters = []
     
     # Caption position: slightly higher than lower third since font is larger
@@ -205,18 +232,29 @@ def _build_lyric_caption_filters(timed_lyrics, video_duration, input_label, outp
             if end_t - start_t < 1.0:
                 end_t = start_t + 2.0
 
+        # Log original text
+        print(f"  📄 Caption {i+1}/{len(timed_lyrics)}:")
+        print(f"     Original: {repr(line)}")
+        print(f"     Encoding: {line.encode('utf-8').hex()[:60]}...")
+        print(f"     Time: {start_t:.1f}s - {end_t:.1f}s")
+
         # Auto-wrap long lines (approx > 22 chars for 85pt Impact font on 1080p width)
         words = line.split()
         if len(line) > 22 and len(words) > 1:
             mid = len(words) // 2
             line = " ".join(words[:mid]) + "\v" + " ".join(words[mid:])
+            print(f"     Wrapped: {repr(line)}")
 
         escaped_line = _esc(line)
+        print(f"     Escaped: {repr(escaped_line)}")
+        
         if not escaped_line.strip() or escaped_line.strip() == "🎵":
+            print(f"     ⚠️  Skipped (empty or music symbol)")
             continue
             
         # Clamp to video duration
         if start_t >= video_duration - 1.0:
+            print(f"     ⚠️  Skipped (beyond video duration)")
             break
         end_t = min(end_t, video_duration - 0.5)
         
@@ -403,6 +441,11 @@ def _create_image_slideshow_video(audio_path, output_path, images,
     )
 
     filter_str = ";".join(filters)
+    
+    # Log filter complex for debugging
+    print(f"\n  🔧 FFmpeg Filter Complex (first 500 chars):")
+    print(f"     {filter_str[:500]}...")
+    print(f"  📏 Total filter length: {len(filter_str)} characters")
 
     cmd.extend([
         "-filter_complex", filter_str,
@@ -415,6 +458,8 @@ def _create_image_slideshow_video(audio_path, output_path, images,
         "-movflags", "+faststart",
         str(output_path)
     ])
+    
+    print(f"\n  ▶️  Running FFmpeg...")
 
     result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=600)
 
