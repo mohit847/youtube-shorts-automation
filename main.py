@@ -69,7 +69,7 @@ def list_drive_songs(creds):
           f"Remaining: {len([s for s in songs if s['name'] not in processed_names])}")
 
 
-def process_song(creds, song_path, no_upload=False, privacy_status="public", file_id=None):
+def process_song(creds, song_path, no_upload=False, privacy_status="public", file_id=None, test_mode=False):
     """
     Strict fail-stop pipeline for one song:
     1. Transcribe song (Gemini → lyrics, name, artist, mood, genre)
@@ -240,7 +240,10 @@ def process_song(creds, song_path, no_upload=False, privacy_status="public", fil
             }
 
     # ── Step 8: Move to Processed ──
-    if file_id and (result.get("uploaded") or no_upload):
+    if test_mode:
+        print("\n📂 Step 8/8: Skipping move to Processed folder (--test mode)")
+        result["moved"] = False
+    elif file_id and (result.get("uploaded") or no_upload):
         print("\n📂 Step 8/8: Moving original file to Processed folder...")
         moved = move_song_to_processed(creds, file_id, song_name)
         result["moved"] = moved
@@ -275,8 +278,12 @@ def main():
     parser.add_argument("--unlisted", action="store_true", help="Upload as unlisted")
     parser.add_argument("--all", action="store_true", help="Process all unprocessed songs")
     parser.add_argument("--local", type=str, help="Use a local audio file")
+    parser.add_argument("--test", action="store_true", help="Test mode: skip upload and do not move file to processed folder")
 
     args = parser.parse_args()
+    if args.test:
+        args.no_upload = True
+
     privacy = "private" if args.private else ("unlisted" if args.unlisted else "public")
 
     # === Local file mode ===
@@ -294,7 +301,7 @@ def main():
         print("🔐 Authenticating...")
         creds = authenticate()
         result = process_song(creds, local_path, no_upload=args.no_upload,
-                              privacy_status=privacy)
+                              privacy_status=privacy, test_mode=args.test)
         if result:
             print(f"\n🎉 Done!")
         return
@@ -328,7 +335,7 @@ def main():
             print(f"{'#'*55}")
             song_path = download_song(creds, song["id"], song["name"])
             result = process_song(creds, song_path, no_upload=args.no_upload,
-                                  privacy_status=privacy, file_id=song["id"])
+                                  privacy_status=privacy, file_id=song["id"], test_mode=args.test)
             if result and result.get("uploaded"):
                 print(f"  🔗 {result['url']}")
             if i < len(unprocessed) and not args.no_upload:
@@ -352,7 +359,7 @@ def main():
             sys.exit(1)
         song_path = download_song(creds, match["id"], match["name"])
         result = process_song(creds, song_path, no_upload=args.no_upload,
-                              privacy_status=privacy, file_id=match["id"])
+                              privacy_status=privacy, file_id=match["id"], test_mode=args.test)
         if result:
             print(f"\n🎉 Done!")
         return
@@ -365,7 +372,7 @@ def main():
     print(f"🎲 Auto-selected: {filename}")
     song_path = download_song(creds, file_id, filename)
     result = process_song(creds, song_path, no_upload=args.no_upload,
-                          privacy_status=privacy, file_id=file_id)
+                          privacy_status=privacy, file_id=file_id, test_mode=args.test)
     if result:
         if result.get("uploaded"):
             print(f"\n🎉 Published! {result.get('url', '')}")

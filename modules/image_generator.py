@@ -48,12 +48,23 @@ def generate_background_images(analysis, count=8):
 
     generated_paths = []
 
+    song_name = analysis.get("song_name", "Unknown Song")
+    mood = analysis.get("mood", "")
+    genre = analysis.get("genre", "")
+    
+    context = ""
+    if mood and genre:
+        context = f"A {mood.lower()} scene matching the vibe of a {genre.lower()} song titled '{song_name}': "
+    elif song_name != "Unknown Song":
+        context = f"A scene matching the vibe of the song '{song_name}': "
+        
     for i, prompt in enumerate(image_prompts[:count]):
         enhanced = (
-            f"{prompt}. "
-            f"Vertical portrait orientation, ultra high quality, "
-            f"cinematic lighting, vibrant colors, professional digital art, "
-            f"no text or watermarks"
+            f"{context}{prompt}. "
+            f"If any historical or real person is mentioned, strictly ensure their face, attire, and likeness are highly accurate and match their real-world appearance. "
+            f"Vertical 9:16 portrait photography, highly realistic, natural lighting, "
+            f"cinematic composition, shot on 35mm lens, photorealistic, authentic, "
+            f"NO cartoon, NO digital art, no text, no watermarks"
         )
 
         print(f"    🖌️  Image {i+1}/{min(count, len(image_prompts))}...")
