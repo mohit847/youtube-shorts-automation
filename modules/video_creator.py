@@ -330,7 +330,7 @@ def _build_lyric_caption_filters(timed_lyrics, video_duration, input_label, outp
 
             # Add call-to-action text below the captions
             cta_text_esc = _esc(final_cta)
-            cta_y = int(VIDEO_HEIGHT * 0.80)  # Below captions (captions are at 75%)
+            cta_y = int(VIDEO_HEIGHT * 0.70)  # Moved up slightly from bottom (was 0.80)
             
             cta_filter = (
                 f"drawtext=fontfile={FONT_BOLD}:"

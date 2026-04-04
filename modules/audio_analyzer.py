@@ -172,9 +172,10 @@ I need you to identify and return the following information about this song:
 11. **vibe_keywords**: 5-8 keywords describing the song's overall vibe (used for YouTube tags)
 12. **cta_text**: A short, highly engaging Call-To-Action (max 50 chars) for the end of the video.
    - MUST MATCH the song's theme.
-   - If Devotional/Spiritual: Use faith-based or blessing-oriented text (e.g., "जय श्री राम लिखकर अपनी श्रद्धा दिखाओ 🙏", "भगवान के भक्त हो तो चैनल को सब्सक्राइब करो 🙏", "अगर आप सच्चे भक्त हैं तो लाइक करें 🔱").
-   - If Romantic: "Like & Subscribe for more love songs ❤️" or similar relatable quote.
-   - If Party/Energetic: "Subscribe for more viral beats 🔥"
+   - CRITICAL LANGUAGE RULE: Write the CTA using a mix of Hindi (Devanagari) and English script. Always keep action words ("Like", "Subscribe", "Comment", "Share") and person/deity names in pure English script. The rest of the sentence should be in Hindi.
+   - If Devotional/Spiritual: e.g., "Shree Ram लिखकर अपनी श्रद्धा दिखाओ 🙏", "Shiva के भक्त हो तो चैनल को Subscribe करो 🙏", "अगर आप सच्चे भक्त हैं तो Like करें 🔱".
+   - If Romantic: e.g., "New love songs के लिए Like और Subscribe करें ❤️".
+   - If Party/Energetic: e.g., "Viral beats के लिए Subscribe करें 🔥".
    - Keep it short and impactful. Do not use generic CTAs if the song has a strong theme.
 
 RESPOND IN THIS EXACT JSON FORMAT (no markdown, no code block, no extra text):
