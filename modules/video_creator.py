@@ -66,8 +66,18 @@ import re
 def _esc(text):
     """
     Escape text for FFmpeg drawtext filter.
-    Handles special characters and ensures proper UTF-8 encoding.
-    Also strips emojis to prevent unreadable box characters in standard fonts.
+    
+    Escaping levels when filter_complex is passed as a subprocess list arg (no shell):
+      Level 1 – FFmpeg filter-graph parser: \\ and ' are special inside '…' quoted values.
+      Level 2 – drawtext text expander: % is special (strftime / metadata codes).
+    
+    Inside text='…':
+      literal backslash  →  \\           (escaped at filter level)
+      literal single-quote →  '\\''      (close quote, escaped quote, open quote)
+      literal colon       →  as-is       (safe inside single-quoted value)
+      literal percent     →  %%          (drawtext expansion level)
+    
+    Also strips emojis and control characters to prevent unreadable output.
     """
     if not isinstance(text, str):
         text = str(text)
@@ -76,23 +86,29 @@ def _esc(text):
     text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
     text = re.sub(r'[\u2600-\u27bf]', '', text)
     text = re.sub(r'[\ufe00-\ufe0f]', '', text)
+    
+    # Strip ALL control characters (0x00-0x1F except \n) — especially \x0b (vertical tab)
+    # which was previously used for line-wrapping but breaks FFmpeg's filter parser.
+    text = re.sub(r'[\x00-\x09\x0b-\x0c\x0e-\x1f]', '', text)
     text = text.strip()
     
     # Log original text for debugging
-    print(f"       _esc input: {repr(text[:50])}")
+    print(f"       _esc input: {repr(text[:80])}")
     
-    # FFmpeg drawtext requires specific escaping
-    text = text.replace("\\", "\\\\\\\\")  # Backslash
-    text = text.replace(":", "\\\\:")      # Colon
-    text = text.replace("'", "\\\\\\'")    # Single quote
-    text = text.replace("%", "%%")         # Percent
+    # --- Level 1: FFmpeg filter-graph parser (inside single-quoted value) ---
+    # Backslash is the escape character; single-quote ends the value.
+    text = text.replace("\\", "\\\\")           # \ → \\
+    text = text.replace("'", "'\\''")            # ' → '\'' (end-quote, literal ', start-quote)
     
-    # Remove problematic characters that can break FFmpeg filters
+    # --- Level 2: drawtext text expansion ---
+    text = text.replace("%", "%%")              # % → %%
+    
+    # Remove characters that could break filter-graph syntax if they leak outside quotes
     for ch in ";[]{}":
         text = text.replace(ch, "")
     
     # Log escaped text
-    print(f"       _esc output: {repr(text[:50])}")
+    print(f"       _esc output: {repr(text[:80])}")
     
     return text
 
@@ -251,7 +267,9 @@ def _build_lyric_caption_filters(timed_lyrics, video_duration, input_label, outp
         words = line.split()
         if len(line) > 22 and len(words) > 1:
             mid = len(words) // 2
-            line = " ".join(words[:mid]) + "\v" + " ".join(words[mid:])
+            # Use literal two-char sequence \n for FFmpeg drawtext line break
+            # (NOT a Python newline, but the text "\n" which drawtext interprets)
+            line = " ".join(words[:mid]) + "\\n" + " ".join(words[mid:])
             print(f"     Wrapped: {repr(line)}")
 
         escaped_line = _esc(line)
@@ -326,7 +344,8 @@ def _build_lyric_caption_filters(timed_lyrics, video_duration, input_label, outp
             words = final_cta.split()
             if len(final_cta) > 22 and len(words) > 1:
                 mid = len(words) // 2
-                final_cta = " ".join(words[:mid]) + "\v" + " ".join(words[mid:])
+                # Use literal two-char sequence \n for FFmpeg drawtext line break
+                final_cta = " ".join(words[:mid]) + "\\n" + " ".join(words[mid:])
 
             # Add call-to-action text below the captions
             cta_text_esc = _esc(final_cta)
