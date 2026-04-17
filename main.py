@@ -1,9 +1,10 @@
 """
 YouTube Shorts Song Automation — Main Orchestrator
 
-Downloads songs from Google Drive, analyzes them with AI,
-creates stunning 9:16 visualizer videos with mood-matching backgrounds,
-generates viral metadata, and uploads to YouTube as Shorts.
+Generates songs with MiniMax AI (falls back to Google Drive),
+analyzes them with Gemini AI, creates stunning 9:16 visualizer videos
+with mood-matching backgrounds, generates viral metadata, and uploads
+to YouTube as Shorts.
 
 Usage:
     python main.py                     # Auto-pick song, generate, upload
@@ -36,15 +37,63 @@ from modules.video_creator import create_visualizer_video, get_audio_metadata
 from modules.metadata_generator import generate_viral_metadata
 from modules.thumbnail_creator import create_thumbnail
 from modules.youtube_uploader import upload_to_youtube
+from modules.music_generator import get_song as get_song_minimax
 
 
 def print_banner():
+    import sys, io
+    # Force UTF-8 output on Windows so box/emoji chars don't crash CP1252
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     print("""
-╔══════════════════════════════════════════════════╗
-║   🎵 YouTube Shorts Song Automation 🎵          ║
-║   Drive → Analyze → Images → Video → Upload     ║
-╚══════════════════════════════════════════════════╝
++==================================================+
+|   YouTube Shorts Song Automation                 |
+|  MiniMax -> Analyze -> Images -> Video -> Upload |
++==================================================+
     """)
+
+
+def _acquire_song(creds, drive_file_id=None, drive_filename=None):
+    """
+    Obtain the song to process:
+      1. MiniMax two-step flow: Lyrics API -> Music API  (primary)
+      2. Google Drive download                           (fallback)
+
+    Returns (song_path, source, actual_file_id).
+    actual_file_id is None when MiniMax was used (no Drive file to move).
+    """
+    import time as _time_mod
+    ts = int(_time_mod.time())
+    base_name = Path(drive_filename).stem if drive_filename else f"minimax_song_{ts}"
+    song_name_with_ts = f"{base_name}_{ts}"
+
+    # Theme for MiniMax Lyrics API — Bollywood/Hindi themed for the channel
+    theme_prompt = (
+        f"A soulful Bollywood Hindi song, emotional and melodious, "
+        f"about love, longing, and deep feelings. "
+        f"Theme: {base_name.replace('_', ' ')}. "
+        "Include Verse, Pre-Chorus, Chorus, Bridge and Outro sections."
+    )
+    # Style string for MiniMax Music API
+    music_style = (
+        "Bollywood, melodious, soulful, romantic, emotional, cinematic, "
+        "Hindi vocals, slow to mid tempo, orchestral strings, tabla"
+    )
+
+    song_path, source, used_file_id = get_song_minimax(
+        creds=creds,
+        theme_prompt=theme_prompt,
+        music_style=music_style,
+        song_name=song_name_with_ts,
+        drive_fallback_fn=download_song if drive_file_id else None,
+        drive_file_id=drive_file_id,
+        drive_filename=drive_filename,
+    )
+    return song_path, source, used_file_id
+
 
 
 def list_drive_songs(creds):
@@ -338,9 +387,18 @@ def main():
             print(f"\n{'#'*55}")
             print(f"# Song {i}/{len(unprocessed)}")
             print(f"{'#'*55}")
-            song_path = download_song(creds, song["id"], song["name"])
+            print(f"\n🎼 Acquiring song (MiniMax → Drive fallback)...")
+            song_path, source, actual_file_id = _acquire_song(
+                creds, song["id"], song["name"]
+            )
+            if not song_path:
+                print(f"  ❌ Could not obtain audio for '{song['name']}'. Skipping.")
+                continue
+            print(f"  📡 Source: {source.upper()}")
+            # Only move to Processed if the song came from Drive
+            fid_for_move = actual_file_id if source == "drive" else None
             result = process_song(creds, song_path, no_upload=args.no_upload,
-                                  privacy_status=privacy, file_id=song["id"], test_mode=args.test)
+                                  privacy_status=privacy, file_id=fid_for_move, test_mode=args.test)
             if result and result.get("uploaded"):
                 print(f"  🔗 {result['url']}")
             if i < len(unprocessed) and not args.no_upload:
@@ -362,22 +420,43 @@ def main():
             for s in songs[:10]:
                 print(f"  - {s['name']}")
             sys.exit(1)
-        song_path = download_song(creds, match["id"], match["name"])
+        print(f"\n🎼 Acquiring song (MiniMax → Drive fallback)...")
+        song_path, source, actual_file_id = _acquire_song(
+            creds, match["id"], match["name"]
+        )
+        if not song_path:
+            print(f"❌ Could not obtain audio for '{match['name']}'.")
+            sys.exit(1)
+        print(f"  📡 Source: {source.upper()}")
+        fid_for_move = actual_file_id if source == "drive" else None
         result = process_song(creds, song_path, no_upload=args.no_upload,
-                              privacy_status=privacy, file_id=match["id"], test_mode=args.test)
+                              privacy_status=privacy, file_id=fid_for_move, test_mode=args.test)
         if result:
             print(f"\n🎉 Done!")
         return
 
     # === Auto-pick ===
-    file_id, filename = get_unprocessed_song(creds)
+    # MiniMax is the PRIMARY source — try it first.
+    # Only look at Drive if MiniMax fails (Drive song acts as fallback audio).
+    file_id, filename = get_unprocessed_song(creds)   # may be (None, None)
     if not file_id:
-        print("✅ All songs processed! Add more to Google Drive.")
-        return
-    print(f"🎲 Auto-selected: {filename}")
-    song_path = download_song(creds, file_id, filename)
+        print("ℹ️  No unprocessed songs in Drive — will generate one via MiniMax.")
+
+    print(f"\n🎼 Acquiring song (MiniMax → Drive fallback)...")
+    if filename:
+        print(f"🎲 Drive fallback candidate: {filename}")
+    song_path, source, actual_file_id = _acquire_song(
+        creds,
+        drive_file_id=file_id,
+        drive_filename=filename,
+    )
+    if not song_path:
+        print("❌ MiniMax generation failed AND no Drive songs available. Stopping.")
+        sys.exit(1)
+    print(f"  📡 Source: {source.upper()}")
+    fid_for_move = actual_file_id if source == "drive" else None
     result = process_song(creds, song_path, no_upload=args.no_upload,
-                          privacy_status=privacy, file_id=file_id, test_mode=args.test)
+                          privacy_status=privacy, file_id=fid_for_move, test_mode=args.test)
     if result:
         if result.get("uploaded"):
             print(f"\n🎉 Published! {result.get('url', '')}")
