@@ -65,11 +65,21 @@ def upload_to_youtube(creds, video_path, title, description, tags,
 
     youtube = build("youtube", "v3", credentials=creds)
 
+    # Sanitize and strictly limit tags to YouTube API limits (Max 500 combined characters)
+    clean_tags = []
+    total_len = 0
+    safe_tags = [t.replace("<", "").replace(">", "").strip() for t in tags if t]
+    for tag in safe_tags:
+        # YouTube measures comma separators towards the 500 char limit implicitly
+        if total_len + len(tag) + 1 <= 500 and len(clean_tags) < 30:
+            clean_tags.append(tag)
+            total_len += len(tag) + 1
+
     body = {
         "snippet": {
             "title": title,
             "description": description,
-            "tags": tags[:30],  # YouTube allows max 30 tags
+            "tags": clean_tags,
             "categoryId": category_id,
             "defaultLanguage": "en",
         },
