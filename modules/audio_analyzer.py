@@ -142,7 +142,7 @@ I need you to identify and return the following information about this song:
 
 1. **song_name**: The actual name of this song. If you can recognize it, give the real name. If not, create an appropriate name based on the lyrics/melody.
 2. **artist**: The artist/singer. If unknown, say "{CHANNEL_NAME}".
-3. **lyrics**: THE MOST IMPORTANT FIELD. Extract the FULL lyrics of the song, or a very detailed text summary of the main themes and spoken words if it's very long or mostly instrumental. We need this exact content to generate highly specific images and metadata.
+3. **lyrics**: THE MOST IMPORTANT FIELD. Extract the FULL lyrics of the song. CRITICAL: Provide the lyrics EXACTLY as they are sung using pure Hindi Devanagari script (e.g., मैं, शूरवीर, लचित). DO NOT translate the words into English. DO NOT write them in Roman/English letters. Keep them in Devanagari so the captions remain perfectly authentic.
 4. **genre**: The music genre (e.g., Pop, Bollywood, Hip-Hop, Classical, Lo-fi, EDM, Rock, R&B, Indie, Bhajan, Devotional, etc.)
 5. **mood**: The emotional mood (e.g., romantic, energetic, melancholic, uplifting, chill, intense, dreamy, nostalgic, devotional, spiritual)
 6. **language**: The language of the song
@@ -153,10 +153,12 @@ I need you to identify and return the following information about this song:
    - Sad/melancholic → deep blues, grays (#191970, #4169E1, #2F4F4F, #483D8B)
    - Devotional/spiritual → saffron, gold, orange (#FF9933, #FFD700, #FF6600, #CC5500)
    - Chill/lo-fi → soft pastels, warm tones (#DDA0DD, #98FB98, #FFE4B5, #87CEEB)
-9. **timed_lyrics**: A list of 15-30 objects representing individual lyric lines with EXACT starting and ending timestamps in seconds. Listen closely to the audio to timestamp when the singer starts and stops singing each line. Each line should be a SHORT phrase (3-10 words max). Cover the entire song from start to end. Example:
+9. **timed_lyrics**: A list of 15-30 objects representing individual lyric lines with EXACT starting and ending timestamps in seconds. Listen closely to the audio to timestamp when the singer starts and stops singing each line. Each line should be a SHORT phrase (3-10 words max). Cover the entire song from start to end. 
+   CRITICAL: Just like the `lyrics` field, this MUST be completely in Hindi Devanagari script ONLY. Never translate proper names or words into English meanings.
+   Example:
    [
-     {"text": "Tujhe dekha toh ye jaana sanam", "start": 12.5, "end": 15.2},
-     {"text": "Pyaar hota hai deewana sanam", "start": 16.0, "end": 19.5}
+     {"text": "तुझे देखा तो ये जाना सनम", "start": 12.5, "end": 15.2},
+     {"text": "प्यार होता है दीवाना सनम", "start": 16.0, "end": 19.5}
    ]
    Do NOT use the audio file name as a lyric line. Only extract the ACTUAL sung words. For long instrumentals, add {"text": "🎵", "start": X, "end": Y}.
 10. **image_prompts**: A list of 10 image descriptions for AI-generated backgrounds. These images should depict the ACTUAL SUBJECT of the song — EXACTLY matching the extracted lyrics, characters, scenes, and themes. Generate images that match EACH SECTION of the song (intro, verse 1, chorus, verse 2, bridge, outro etc.) so the visuals flow with the music.

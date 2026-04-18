@@ -1,12 +1,13 @@
 """
 MiniMax Music Generator  —  Two-step pipeline
 =============================================
-Step 1: Lyrics Generation API  → auto-write structured lyrics from a theme
-Step 2: Music Generation API   → compose & produce a complete MP3 from those lyrics
+Step 1: Lyrics Generation API  → auto-write SHORT structured lyrics (30-50 sec)
+                                 tailored to a specific Indian identity
+Step 2: Music Generation API   → compose & produce a complete MP3
 
 Falls back to Google Drive download if either step fails.
 
-APIs used:
+APIs:
   POST https://api.minimax.io/v1/lyrics_generation
   POST https://api.minimax.io/v1/music_generation
 """
@@ -25,27 +26,24 @@ from config import MINIMAX_API_KEY, SONGS_DIR
 MINIMAX_LYRICS_URL = "https://api.minimax.io/v1/lyrics_generation"
 MINIMAX_MUSIC_URL  = "https://api.minimax.io/v1/music_generation"
 
-# Use music-2.6-free (all API-key holders).
-# Switch to "music-2.6" if you upgrade to a Token / paid plan.
+# music-2.6-free: available to all API-key holders (lower RPM)
+# Switch to "music-2.6" on a Token / paid plan for higher RPM
 MINIMAX_MODEL = "music-2.6-free"
-
-# Default theme used when no hint is available at all
-_DEFAULT_THEME = "A soulful Bollywood song about love, longing, and hope. Melodious, emotional, cinematic."
-_DEFAULT_STYLE = "Bollywood, melodious, soulful, romantic, emotional, cinematic, orchestral"
 
 
 # ─── Step 1: Lyrics Generation ───────────────────────────────────────────────
 
-def generate_lyrics_minimax(theme_prompt: str) -> str | None:
+def generate_lyrics_minimax(song_theme: str, identity_name: str = "") -> str | None:
     """
-    Call the MiniMax Lyrics Generation API to produce a full structured song
-    (Verse, Chorus, Bridge, etc.) from a plain-text theme description.
+    Call the MiniMax Lyrics Generation API to produce SHORT structured lyrics
+    suitable for a 30–50 second song.
 
     Args:
-        theme_prompt: e.g. "A soulful Bollywood song about missing someone"
+        song_theme:     Vivid description of what the song should convey
+        identity_name:  The Indian warrior / deity / figure the song is about
 
     Returns:
-        Lyrics string ready to pass to generate_song_minimax(), or None on failure.
+        Lyrics string (8–12 lines, [Verse] + [Chorus]) or None on failure.
     """
     if not MINIMAX_API_KEY:
         print("  [Music] MINIMAX_API_KEY not set — cannot generate lyrics")
@@ -54,11 +52,23 @@ def generate_lyrics_minimax(theme_prompt: str) -> str | None:
     try:
         import requests
     except ImportError:
-        print("  [Music] 'requests' not installed — cannot call MiniMax API")
+        print("  [Music] 'requests' not installed")
         return None
 
-    print(f"  [Music] Step 1/2 — Generating lyrics via MiniMax Lyrics API...")
-    print(f"  [Music]   Theme: {theme_prompt[:100]}")
+    subject_line = f" about {identity_name}" if identity_name else ""
+    print(f"  [Music] Step 1/2 — Generating short lyrics (30-50 sec){subject_line}...")
+
+    # ── CRITICAL: lyrics must be short so the generated song is 30-50 seconds ──
+    theme_prompt = (
+        f"Write a SHORT Hindi song{subject_line}.\n\n"
+        f"Theme and Character Aura:\n{song_theme}\n\n"
+        "CRITICAL CONSTRAINTS (MUST OBEY):\n"
+        "1. SCRIPT: You MUST write the lyrics ENTIRELY in pure Hindi Devanagari script (e.g. मैं, शूरवीर, देवी). DO NOT use English letters or Roman transliteration. This guarantees the AI singer uses native Hindi pronunciation without a foreign accent.\n"
+        "2. LENGTH: The song MUST NOT exceed 45 seconds.\n"
+        "   - Generate exactly ONE [Verse] and ONE [Chorus] ONLY.\n"
+        "   - The entire song must be maximum 6 to 8 short lines total.\n"
+        "3. TONE: Strictly reflect the specified character's aura in the wording."
+    )
 
     payload = {
         "mode": "write_full_song",
@@ -88,45 +98,61 @@ def generate_lyrics_minimax(theme_prompt: str) -> str | None:
         return None
 
     body = resp.json()
-
-    # Check API-level status
     base_resp = body.get("base_resp", {})
     if base_resp.get("status_code", -1) != 0:
         print(f"  [Music] Lyrics API error: {base_resp.get('status_msg', 'unknown')}")
         return None
 
-    # Extract lyrics — field may be at data.lyrics or data.text depending on version
     data = body.get("data", {})
     lyrics = data.get("lyrics") or data.get("text") or ""
     if not lyrics:
-        # Fallback: some versions return lyrics directly in body
         lyrics = body.get("lyrics") or body.get("text") or ""
 
     if not lyrics:
-        print(f"  [Music] Lyrics API returned no lyrics content. Response: {str(body)[:200]}")
+        print(f"  [Music] Lyrics API returned no content. Response: {str(body)[:200]}")
         return None
 
-    line_count = len([l for l in lyrics.splitlines() if l.strip()])
-    print(f"  [Music]   Lyrics generated: {line_count} lines")
+    # Hard-trim to at most 15 non-empty, non-tag lines to guarantee short output
+    lines = lyrics.splitlines()
+    kept, content_count = [], 0
+    for line in lines:
+        stripped = line.strip()
+        is_tag = stripped.startswith("[") and stripped.endswith("]")
+        if is_tag:
+            kept.append(line)
+        elif stripped:
+            if content_count < 15:
+                kept.append(line)
+                content_count += 1
+        else:
+            kept.append(line)  # keep blank lines for readability
+
+    lyrics = "\n".join(kept).strip()
+    print(f"  [Music]   Lyrics ready: {content_count} lines (target: < 45 sec)")
+    print("  [Music]   === GENERATED LYRICS ===")
+    for line in lyrics.splitlines():
+        print(f"            {line}")
+    print("  [Music]   ========================")
+    
     return lyrics
 
 
 # ─── Step 2: Music Generation ─────────────────────────────────────────────────
 
-def generate_song_minimax(music_prompt: str, lyrics: str, song_name: str = "generated_song") -> Path | None:
+def generate_song_minimax(music_style: str, lyrics: str, song_name: str = "generated_song") -> Path | None:
     """
     Call the MiniMax Music Generation API and save the result as an MP3.
 
     Args:
-        music_prompt: Style/mood description e.g. "Bollywood, soulful, slow tempo"
-        lyrics:       Full structured lyrics (output of generate_lyrics_minimax)
-        song_name:    Base filename (no extension) for the saved MP3
+        music_style: Style/mood tags e.g. "Devotional Bhajan, tabla, orchestral strings"
+        lyrics:      Short structured lyrics (output of generate_lyrics_minimax)
+        song_name:   Base filename (no extension) for the saved MP3
 
     Returns:
         Path to the saved MP3, or None on failure.
     """
     if not MINIMAX_API_KEY:
-        print("  [Music] MINIMAX_API_KEY not set — skipping music generation")
+        print("  [Music] MINIMAX_API_KEY not set — skipping")
         return None
 
     try:
@@ -138,19 +164,22 @@ def generate_song_minimax(music_prompt: str, lyrics: str, song_name: str = "gene
     safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in song_name)
     output_path = SONGS_DIR / f"{safe_name}.mp3"
 
-    print(f"  [Music] Step 2/2 — Composing song via MiniMax Music API (model: {MINIMAX_MODEL})...")
-    print(f"  [Music]   Style: {music_prompt[:80]}")
+    # CRITICAL: Force native Hindi diction to fix foreigner-accent issues and prevent long intros/outros
+    enhanced_music_style = f"{music_style}, native Indian singer, traditional Indian vocals, absolute pure Hindi pronunciation, 0 intro, instant vocal start, no aalap, no raag, no humming before lyrics, immediate singing, no instrumental intro, no musical outro, proper clean fadeout ending"
+
+    print(f"  [Music] Step 2/2 — Composing via MiniMax Music API (model: {MINIMAX_MODEL})...")
+    print(f"  [Music]   Style: {enhanced_music_style[:90]}...")
 
     payload = {
         "model": MINIMAX_MODEL,
-        "prompt": music_prompt[:2000],
+        "prompt": enhanced_music_style[:2000],
         "lyrics": lyrics[:3500],
         "audio_setting": {
             "sample_rate": 44100,
             "bitrate": 256000,
             "format": "mp3"
         },
-        "output_format": "hex"   # hex so we can save locally; url expires in 24h
+        "output_format": "hex"   # hex so we save locally; url expires in 24h
     }
     headers = {
         "Authorization": f"Bearer {MINIMAX_API_KEY}",
@@ -162,7 +191,7 @@ def generate_song_minimax(music_prompt: str, lyrics: str, song_name: str = "gene
             MINIMAX_MUSIC_URL,
             json=payload,
             headers=headers,
-            timeout=300      # music generation can take 2-4 minutes
+            timeout=300       # generation can take 2-4 min
         )
     except requests.exceptions.Timeout:
         print("  [Music] Music API timed out (>300s)")
@@ -183,10 +212,9 @@ def generate_song_minimax(music_prompt: str, lyrics: str, song_name: str = "gene
 
     audio_hex = body.get("data", {}).get("audio", "")
     if not audio_hex:
-        print(f"  [Music] Music API returned empty audio. Full response: {str(body)[:300]}")
+        print(f"  [Music] Music API returned empty audio. Response: {str(body)[:300]}")
         return None
 
-    # Decode hex → raw bytes → MP3 file
     try:
         audio_bytes = binascii.unhexlify(audio_hex)
     except (binascii.Error, ValueError) as e:
@@ -201,69 +229,70 @@ def generate_song_minimax(music_prompt: str, lyrics: str, song_name: str = "gene
     size_kb = len(audio_bytes) / 1024
     print(f"  [Music] Song saved: {output_path.name}  ({size_kb:.0f} KB, ~{duration_s:.0f}s)")
 
+    if duration_s > 0 and not (25 <= duration_s <= 60):
+        print(f"  [Music]   WARNING: Duration {duration_s:.0f}s is outside target 30-50s range")
+
     return output_path
 
 
 # ─── Combined two-step flow ───────────────────────────────────────────────────
 
-def generate_song_full(theme_prompt: str, music_style: str, song_name: str) -> Path | None:
+def generate_song_full(song_theme: str, music_style: str, song_name: str,
+                       identity_name: str = "") -> Path | None:
     """
-    Run the full two-step flow:
-      1. Generate lyrics from theme_prompt  (Lyrics API)
-      2. Compose the song from those lyrics (Music API)
+    Full two-step flow:
+      1. Generate SHORT lyrics from song_theme  (Lyrics API)
+      2. Compose the song from those lyrics     (Music API)
 
     Args:
-        theme_prompt: Plain-text theme, e.g. "A Bollywood song about missing someone at night"
-        music_style:  Style string for the Music API, e.g. "Bollywood, soulful, orchestral"
-        song_name:    Base filename for the saved MP3
+        song_theme:    Plain-text theme for the lyrics
+        music_style:   Style tags for the Music API
+        song_name:     Base filename for the saved MP3
+        identity_name: Identity being celebrated (shown in logs)
 
     Returns:
         Path to the saved MP3, or None if either step fails.
     """
-    # Step 1 — lyrics
-    lyrics = generate_lyrics_minimax(theme_prompt)
+    lyrics = generate_lyrics_minimax(song_theme, identity_name)
     if not lyrics:
-        print("  [Music] Lyrics generation failed — aborting music generation")
+        print("  [Music] Lyrics generation failed — aborting")
         return None
-
-    # Step 2 — music
     return generate_song_minimax(music_style, lyrics, song_name)
 
 
 # ─── High-level helper for main.py ───────────────────────────────────────────
 
-def get_song(creds, theme_prompt: str, music_style: str, song_name: str = "generated_song",
+def get_song(creds, song_theme: str, music_style: str, song_name: str = "generated_song",
+             identity_name: str = "",
              *, drive_fallback_fn=None, drive_file_id: str = None,
              drive_filename: str = None):
     """
     Obtain an audio file for the pipeline:
 
-    1. Try the full MiniMax two-step flow (lyrics → music) → return (path, "minimax", None)
-    2. On any failure, fall back to Google Drive download    → return (path, "drive", file_id)
-    3. If both fail                                          → return (None, None, None)
+    1. MiniMax two-step (lyrics → music)  → return (path, "minimax", None)
+    2. Fallback: Google Drive download     → return (path, "drive",   file_id)
+    3. Both fail                           → return (None, None,      None)
 
     Args:
         creds:             Google OAuth credentials (for Drive fallback)
-        theme_prompt:      Lyrics API theme, e.g. "Bollywood song about missing someone"
-        music_style:       Music API style string, e.g. "Bollywood, soulful, slow tempo"
-        song_name:         Base filename for the output MP3
+        song_theme:        Theme passed to Lyrics API
+        music_style:       Style passed to Music API
+        song_name:         Output MP3 base filename
+        identity_name:     Identity being celebrated (for logging)
         drive_fallback_fn: Callable(creds, file_id, filename) -> Path
         drive_file_id:     Drive file ID for fallback
         drive_filename:    Drive filename for fallback
     """
-    # ── 1. Try MiniMax two-step flow ──────────────────────────────────────────
-    print("  [Music] Starting MiniMax two-step generation (Lyrics -> Music)...")
-    song_path = generate_song_full(theme_prompt, music_style, song_name)
+    print(f"  [Music] Starting MiniMax two-step generation (Lyrics -> Music)...")
+    song_path = generate_song_full(song_theme, music_style, song_name, identity_name)
 
     if song_path is not None:
         print(f"  [Music] Using MiniMax-generated song: {song_path.name}")
         return song_path, "minimax", None
 
-    # ── 2. Fall back to Google Drive ─────────────────────────────────────────
     print("  [Music] MiniMax failed — falling back to Google Drive...")
-
     if drive_fallback_fn is None or drive_file_id is None or drive_filename is None:
-        print("  [Music] No Drive fallback configured. Cannot obtain a song.")
+        print("  [Music] No Drive fallback configured.")
         return None, None, None
 
     try:

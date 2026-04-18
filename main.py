@@ -38,6 +38,7 @@ from modules.metadata_generator import generate_viral_metadata
 from modules.thumbnail_creator import create_thumbnail
 from modules.youtube_uploader import upload_to_youtube
 from modules.music_generator import get_song as get_song_minimax
+from modules.identity_selector import select_identity
 
 
 def print_banner():
@@ -59,35 +60,58 @@ def print_banner():
 def _acquire_song(creds, drive_file_id=None, drive_filename=None):
     """
     Obtain the song to process:
-      1. MiniMax two-step flow: Lyrics API -> Music API  (primary)
-      2. Google Drive download                           (fallback)
+      1. Gemini selects a unique Indian identity (warrior / deity / hero)
+      2. MiniMax Lyrics API  -> writes short (30-50 sec) identity-themed lyrics
+      3. MiniMax Music API   -> composes the song
+      4. If MiniMax fails    -> fall back to Google Drive download
 
     Returns (song_path, source, actual_file_id).
-    actual_file_id is None when MiniMax was used (no Drive file to move).
+    actual_file_id is None when MiniMax was used.
     """
     import time as _time_mod
     ts = int(_time_mod.time())
-    base_name = Path(drive_filename).stem if drive_filename else f"minimax_song_{ts}"
-    song_name_with_ts = f"{base_name}_{ts}"
 
-    # Theme for MiniMax Lyrics API — Bollywood/Hindi themed for the channel
-    theme_prompt = (
-        f"A soulful Bollywood Hindi song, emotional and melodious, "
-        f"about love, longing, and deep feelings. "
-        f"Theme: {base_name.replace('_', ' ')}. "
-        "Include Verse, Pre-Chorus, Chorus, Bridge and Outro sections."
-    )
-    # Style string for MiniMax Music API
-    music_style = (
-        "Bollywood, melodious, soulful, romantic, emotional, cinematic, "
-        "Hindi vocals, slow to mid tempo, orchestral strings, tabla"
-    )
+    # ── Step A: Pick a unique identity via Gemini ─────────────────────────
+    try:
+        identity = select_identity()
+    except Exception as e:
+        print(f"  [Identity] ❌ Gemini selection failed: {e}")
+        identity = None
 
+    if identity:
+        identity_name = identity["name"]
+        song_theme    = identity["song_theme"]
+        music_style   = identity["music_style"]
+        # Safe filename: identity name + timestamp
+        safe_id = "".join(c if c.isalnum() or c in "_-" else "_" for c in identity_name)
+        song_name = f"{safe_id}_{ts}"
+
+        print(f"  [Identity] Creating song for: {identity_name}")
+        print(f"  [Identity] Style: {music_style[:80]}...")
+    else:
+        # Fallback if ALL Gemini identity selection models fail completely
+        print("  [Identity] ⚠️ Falling back to a soothing Indian cultural song.")
+        base_name   = Path(drive_filename).stem if drive_filename else f"song_{ts}"
+        identity_name = ""
+        song_theme  = (
+            f"A deeply soothing, highly peaceful, traditional Indian cultural song "
+            f"about spiritual calmness, nature, and pure devotion. "
+            f"Theme: The beauty of Indian culture and spirituality. "
+            "ONLY [Verse] + [Chorus]."
+        )
+        music_style = (
+            "Calming traditional Indian folk, soft Bansuri flute, gentle tabla percussion, "
+            "soothing, peaceful, spiritual, ethereal, deep cultural roots, sweet authentic Indian vocals"
+        )
+        song_name = f"soothing_culture_song_{ts}"
+
+    # ── Step B: Generate via MiniMax (Lyrics -> Music), fallback to Drive ─
     song_path, source, used_file_id = get_song_minimax(
         creds=creds,
-        theme_prompt=theme_prompt,
+        song_theme=song_theme,
         music_style=music_style,
-        song_name=song_name_with_ts,
+        song_name=song_name,
+        identity_name=identity_name,
         drive_fallback_fn=download_song if drive_file_id else None,
         drive_file_id=drive_file_id,
         drive_filename=drive_filename,
@@ -168,6 +192,42 @@ def process_song(creds, song_path, no_upload=False, privacy_status="public", fil
     lyric_lines = analysis.get("lyric_lines", [])
     if lyric_lines:
         print(f"  📝 Caption lines: {len(lyric_lines)} lines for video")
+
+    # ── Step 2.5: Dynamically Trim Instrumental Intro ──
+    timed_lyrics = analysis.get("timed_lyrics", [])
+    if timed_lyrics and "start" in timed_lyrics[0]:
+        first_word_start = timed_lyrics[0]["start"]
+        # Only trim if the intro is longer than 2 seconds (leave a 0.5s buffer)
+        buffer = 0.5
+        trim_amount = max(0, first_word_start - buffer)
+        
+        if trim_amount >= 1.5:
+            print(f"\n✂️  Step 2.5: Trimming {trim_amount:.1f}s of instrumental intro (Starts at {first_word_start}s)...")
+            try:
+                import subprocess
+                tmp_path = song_path.with_name(f"trimmed_{song_path.name}")
+                subprocess.run([
+                    "ffmpeg", "-y",
+                    "-i", str(song_path),
+                    "-ss", str(trim_amount),
+                    "-c", "copy",
+                    str(tmp_path)
+                ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                
+                # Replace original file with trimmed version
+                tmp_path.replace(song_path)
+                
+                # Update duration metadata
+                metadata['duration'] -= trim_amount
+                print(f"  ✂️  New duration: {metadata['duration']:.1f}s")
+                
+                # Push back all caption timestamps mathematically
+                for line in timed_lyrics:
+                    line["start"] = max(0.0, line["start"] - trim_amount)
+                    line["end"] = max(0.0, line["end"] - trim_amount)
+                    
+            except Exception as e:
+                print(f"  ⚠️  FFmpeg trim failed (skipping): {e}")
 
     # ── Step 3: Generate images with Nano Banana 2 ──
     print("\n🎨 Step 3/7: Generating images with Nano Banana 2...")
@@ -436,15 +496,17 @@ def main():
         return
 
     # === Auto-pick ===
-    # MiniMax is the PRIMARY source — try it first.
-    # Only look at Drive if MiniMax fails (Drive song acts as fallback audio).
-    file_id, filename = get_unprocessed_song(creds)   # may be (None, None)
-    if not file_id:
-        print("ℹ️  No unprocessed songs in Drive — will generate one via MiniMax.")
-
-    print(f"\n🎼 Acquiring song (MiniMax → Drive fallback)...")
+    # MiniMax generation is ALWAYS the primary source.
+    # Google Drive is only used as a fallback if MiniMax fails.
+    file_id, filename = get_unprocessed_song(creds)
+    
+    print("\n🎼 Acquiring new song...")
+    print("  [Logic] Primary Source: MiniMax AI Generation (Attempting first)")
+    
     if filename:
-        print(f"🎲 Drive fallback candidate: {filename}")
+        print(f"  [Logic] Fallback Source: Found '{filename}' in Drive (Will use ONLY if MiniMax fails)")
+    else:
+        print("  [Logic] Fallback Source: None (Drive is empty)")
     song_path, source, actual_file_id = _acquire_song(
         creds,
         drive_file_id=file_id,
