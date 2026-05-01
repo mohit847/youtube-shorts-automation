@@ -1,9 +1,9 @@
 """
 MiniMax Music Generator  —  Two-step pipeline
 =============================================
-Step 1: Lyrics Generation API  → auto-write SHORT structured lyrics (30-50 sec)
-                                 tailored to a specific Indian identity
-Step 2: Music Generation API   → compose & produce a complete MP3
+Step 1: Lyrics Generation API  -> auto-write SHORT structured lyrics (30-50 sec)
+                                  tailored to a specific Indian identity
+Step 2: Music Generation API   -> compose & produce a complete MP3
 
 Falls back to Google Drive download if either step fails.
 
@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import MINIMAX_API_KEY, SONGS_DIR
 
 
-# ─── Constants ────────────────────────────────────────────────────────────────
+# --- Constants ----------------------------------------------------------------
 
 MINIMAX_LYRICS_URL = "https://api.minimax.io/v1/lyrics_generation"
 MINIMAX_MUSIC_URL  = "https://api.minimax.io/v1/music_generation"
@@ -31,22 +31,26 @@ MINIMAX_MUSIC_URL  = "https://api.minimax.io/v1/music_generation"
 MINIMAX_MODEL = "music-2.6-free"
 
 
-# ─── Step 1: Lyrics Generation ───────────────────────────────────────────────
+# --- Step 1: Lyrics Generation -----------------------------------------------
 
-def generate_lyrics_minimax(song_theme: str, identity_name: str = "") -> str | None:
+def generate_lyrics_minimax(song_theme: str, identity_name: str = "",
+                            music_style: str = "") -> str | None:
     """
     Call the MiniMax Lyrics Generation API to produce SHORT structured lyrics
-    suitable for a 30–50 second song.
+    suitable for a 30-50 second song.
 
     Args:
         song_theme:     Vivid description of what the song should convey
         identity_name:  The Indian warrior / deity / figure the song is about
+        music_style:    Style/energy string from identity_selector. Used to tune
+                        lyric rhythm, line length, and emotional intensity so the
+                        words carry the same energy as the music.
 
     Returns:
-        Lyrics string (8–12 lines, [Verse] + [Chorus]) or None on failure.
+        Lyrics string (8-12 lines, [Verse] + [Chorus]) or None on failure.
     """
     if not MINIMAX_API_KEY:
-        print("  [Music] MINIMAX_API_KEY not set — cannot generate lyrics")
+        print("  [Music] MINIMAX_API_KEY not set -- cannot generate lyrics")
         return None
 
     try:
@@ -56,18 +60,71 @@ def generate_lyrics_minimax(song_theme: str, identity_name: str = "") -> str | N
         return None
 
     subject_line = f" about {identity_name}" if identity_name else ""
-    print(f"  [Music] Step 1/2 — Generating short lyrics (30-50 sec){subject_line}...")
+    print(f"  [Music] Step 1/2 -- Generating short lyrics (30-50 sec){subject_line}...")
 
-    # ── CRITICAL: lyrics must be short so the generated song is 30-50 seconds ──
+    # -- Derive an energy-level writing guide from the music_style string ------
+    # MiniMax's music model follows lyric emotion just as strongly as style tags.
+    # Short punchy war-cry lyrics -> powerful high-energy music.
+    # Flowing prayer lyrics -> soft devotional music.
+    # By matching lyric writing style to music energy, BOTH signals align and
+    # the model has no choice but to produce the correct energy level.
+    style_lower = music_style.lower()
+
+    is_high_energy = any(kw in style_lower for kw in [
+        "150", "140", "130", "fast", "battle", "war", "aggressive", "fierce",
+        "roaring", "thundering", "dhol", "anthem", "march", "relentless",
+        "intense", "epic", "cinematic", "tribal", "rebellious", "powerful"
+    ])
+    is_medium_energy = any(kw in style_lower for kw in [
+        "120", "110", "100", "heroic", "dramatic", "kirtan", "patriotic", "legendary"
+    ])
+
+    if is_high_energy:
+        energy_writing_guide = (
+            "\n4. ENERGY & WRITING STYLE -- THIS IS A HIGH-ENERGY, POWERFUL SONG:\n"
+            "   - Write SHORT, PUNCHY, EXPLOSIVE lines (4-6 syllables per line max).\n"
+            "   - Use battle-cry vocabulary: fire, thunder, roar, conquer, glory, rage, blood, victory.\n"
+            "   - Lines must feel like WAR CRIES on a battlefield, NOT gentle prayers.\n"
+            "   - Use exclamations, imperatives, and rapid staccato rhythm.\n"
+            "   - The [Chorus] MUST be an explosive rallying cry -- something people chant together.\n"
+            "   - Every single word must radiate raw power, fury, and unstoppable force."
+        )
+        print("  [Music]   Energy level detected: HIGH (war-cry lyric style)")
+    elif is_medium_energy:
+        energy_writing_guide = (
+            "\n4. ENERGY & WRITING STYLE -- THIS IS A MEDIUM-ENERGY, HEROIC SONG:\n"
+            "   - Write bold, confident lines with a sense of grandeur and legend.\n"
+            "   - Use vocabulary of glory, honour, courage, epic deeds, immortal legacy.\n"
+            "   - Rhythm should be marching and proud, not soft or delicate.\n"
+            "   - The [Chorus] must be a bold proclamation of the hero's greatness."
+        )
+        print("  [Music]   Energy level detected: MEDIUM (heroic lyric style)")
+    else:
+        energy_writing_guide = (
+            "\n4. ENERGY & WRITING STYLE -- THIS IS A SLOW, DEVOTIONAL SONG:\n"
+            "   - Write flowing, melodious lines with warmth and spiritual depth.\n"
+            "   - Use vocabulary of divine grace, peace, blessings, love, surrender.\n"
+            "   - Lines should feel like a heartfelt prayer or bhajan.\n"
+            "   - The [Chorus] must be a tender, devotional refrain."
+        )
+        print("  [Music]   Energy level detected: LOW (devotional lyric style)")
+
+    # -- CRITICAL: lyrics must be short so the generated song is 30-50 seconds -
+    style_hint = f"\nMusic Energy (the song WILL be produced with this style -- write lyrics to match this energy exactly): {music_style[:200]}\n" if music_style else ""
+
     theme_prompt = (
         f"Write a SHORT Hindi song{subject_line}.\n\n"
-        f"Theme and Character Aura:\n{song_theme}\n\n"
+        f"Theme and Character Aura:\n{song_theme}\n"
+        f"{style_hint}\n"
         "CRITICAL CONSTRAINTS (MUST OBEY):\n"
-        "1. SCRIPT: You MUST write the lyrics ENTIRELY in pure Hindi Devanagari script (e.g. मैं, शूरवीर, देवी). DO NOT use English letters or Roman transliteration. This guarantees the AI singer uses native Hindi pronunciation without a foreign accent.\n"
+        "1. SCRIPT: You MUST write the lyrics ENTIRELY in pure Hindi Devanagari script "
+        "(e.g. \u092e\u0948\u0902, \u0936\u0942\u0930\u0935\u0940\u0930, \u0926\u0947\u0935\u0940). DO NOT use English letters or Roman transliteration. "
+        "This guarantees the AI singer uses native Hindi pronunciation without a foreign accent.\n"
         "2. LENGTH: The song MUST NOT exceed 45 seconds.\n"
         "   - Generate exactly ONE [Verse] and ONE [Chorus] ONLY.\n"
         "   - The entire song must be maximum 6 to 8 short lines total.\n"
-        "3. TONE: Strictly reflect the specified character's aura in the wording."
+        "3. TONE: Strictly reflect the specified character's aura in every single word."
+        f"{energy_writing_guide}"
     )
 
     payload = {
@@ -137,7 +194,7 @@ def generate_lyrics_minimax(song_theme: str, identity_name: str = "") -> str | N
     return lyrics
 
 
-# ─── Step 2: Music Generation ─────────────────────────────────────────────────
+# --- Step 2: Music Generation -------------------------------------------------
 
 def generate_song_minimax(music_style: str, lyrics: str, song_name: str = "generated_song") -> Path | None:
     """
@@ -152,7 +209,7 @@ def generate_song_minimax(music_style: str, lyrics: str, song_name: str = "gener
         Path to the saved MP3, or None on failure.
     """
     if not MINIMAX_API_KEY:
-        print("  [Music] MINIMAX_API_KEY not set — skipping")
+        print("  [Music] MINIMAX_API_KEY not set -- skipping")
         return None
 
     try:
@@ -164,11 +221,20 @@ def generate_song_minimax(music_style: str, lyrics: str, song_name: str = "gener
     safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in song_name)
     output_path = SONGS_DIR / f"{safe_name}.mp3"
 
-    # CRITICAL: Force native Hindi diction to fix foreigner-accent issues and prevent long intros/outros
-    enhanced_music_style = f"{music_style}, native Indian singer, traditional Indian vocals, absolute pure Hindi pronunciation, 0 intro, instant vocal start, no aalap, no raag, no humming before lyrics, immediate singing, no instrumental intro, no musical outro, proper clean fadeout ending"
+    # Build the final style prompt.
+    # The character-specific style (BPM, instruments, energy, vocal type) from the identity
+    # selector goes FIRST so MiniMax weights it as the primary directive.
+    # We then append only the minimal guards needed to prevent foreigner accents and pre-lyric
+    # intros -- without overriding the character's unique energy with generic filler.
+    NO_INTRO_GUARDS = (
+        "native Indian singer, absolute pure Hindi pronunciation, "
+        "no instrumental intro, no aalap, no raag, no pre-lyric humming, "
+        "start singing immediately, clean fadeout ending"
+    )
+    enhanced_music_style = f"{music_style}, {NO_INTRO_GUARDS}"
 
-    print(f"  [Music] Step 2/2 — Composing via MiniMax Music API (model: {MINIMAX_MODEL})...")
-    print(f"  [Music]   Style: {enhanced_music_style[:90]}...")
+    print(f"  [Music] Step 2/2 -- Composing via MiniMax Music API (model: {MINIMAX_MODEL})...")
+    print(f"  [Music]   Style: {enhanced_music_style[:120]}...")
 
     payload = {
         "model": MINIMAX_MODEL,
@@ -235,7 +301,7 @@ def generate_song_minimax(music_style: str, lyrics: str, song_name: str = "gener
     return output_path
 
 
-# ─── Combined two-step flow ───────────────────────────────────────────────────
+# --- Combined two-step flow ---------------------------------------------------
 
 def generate_song_full(song_theme: str, music_style: str, song_name: str,
                        identity_name: str = "") -> Path | None:
@@ -244,23 +310,17 @@ def generate_song_full(song_theme: str, music_style: str, song_name: str,
       1. Generate SHORT lyrics from song_theme  (Lyrics API)
       2. Compose the song from those lyrics     (Music API)
 
-    Args:
-        song_theme:    Plain-text theme for the lyrics
-        music_style:   Style tags for the Music API
-        song_name:     Base filename for the saved MP3
-        identity_name: Identity being celebrated (shown in logs)
-
-    Returns:
-        Path to the saved MP3, or None if either step fails.
+    music_style is passed to BOTH steps so the lyric writing style
+    (line length, word choice, energy) matches the musical energy.
     """
-    lyrics = generate_lyrics_minimax(song_theme, identity_name)
+    lyrics = generate_lyrics_minimax(song_theme, identity_name, music_style=music_style)
     if not lyrics:
-        print("  [Music] Lyrics generation failed — aborting")
+        print("  [Music] Lyrics generation failed -- aborting")
         return None
     return generate_song_minimax(music_style, lyrics, song_name)
 
 
-# ─── High-level helper for main.py ───────────────────────────────────────────
+# --- High-level helper for main.py -------------------------------------------
 
 def get_song(creds, song_theme: str, music_style: str, song_name: str = "generated_song",
              identity_name: str = "",
@@ -269,9 +329,9 @@ def get_song(creds, song_theme: str, music_style: str, song_name: str = "generat
     """
     Obtain an audio file for the pipeline:
 
-    1. MiniMax two-step (lyrics → music)  → return (path, "minimax", None)
-    2. Fallback: Google Drive download     → return (path, "drive",   file_id)
-    3. Both fail                           → return (None, None,      None)
+    1. MiniMax two-step (lyrics -> music)  -> return (path, "minimax", None)
+    2. Fallback: Google Drive download     -> return (path, "drive",   file_id)
+    3. Both fail                           -> return (None, None,      None)
 
     Args:
         creds:             Google OAuth credentials (for Drive fallback)
@@ -290,7 +350,7 @@ def get_song(creds, song_theme: str, music_style: str, song_name: str = "generat
         print(f"  [Music] Using MiniMax-generated song: {song_path.name}")
         return song_path, "minimax", None
 
-    print("  [Music] MiniMax failed — falling back to Google Drive...")
+    print("  [Music] MiniMax failed -- falling back to Google Drive...")
     if drive_fallback_fn is None or drive_file_id is None or drive_filename is None:
         print("  [Music] No Drive fallback configured.")
         return None, None, None

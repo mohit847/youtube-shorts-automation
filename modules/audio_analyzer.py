@@ -98,6 +98,13 @@ def analyze_song(audio_path):
                 if field not in analysis:
                     raise ValueError(f"Missing field: {field}")
 
+            # Log detected vocals_start_time for debugging
+            vst = analysis.get("vocals_start_time")
+            if vst is not None:
+                print(f"  🎤 Vocals start at: {vst:.2f}s (pre-lyric content will be trimmed)")
+            else:
+                print(f"  ⚠️  vocals_start_time not returned by model — will infer from timed_lyrics")
+
             print(f"  🎵 Song: {analysis['song_name']}")
             print(f"  🎤 Artist: {analysis['artist']}")
             print(f"  🎸 Genre: {analysis['genre']}")
@@ -153,32 +160,43 @@ I need you to identify and return the following information about this song:
    - Sad/melancholic → deep blues, grays (#191970, #4169E1, #2F4F4F, #483D8B)
    - Devotional/spiritual → saffron, gold, orange (#FF9933, #FFD700, #FF6600, #CC5500)
    - Chill/lo-fi → soft pastels, warm tones (#DDA0DD, #98FB98, #FFE4B5, #87CEEB)
-9. **timed_lyrics**: A list of 15-30 objects representing individual lyric lines with EXACT starting and ending timestamps in seconds. Listen closely to the audio to timestamp when the singer starts and stops singing each line. Each line should be a SHORT phrase (3-10 words max). Cover the entire song from start to end. 
-   CRITICAL: Just like the `lyrics` field, this MUST be completely in Hindi Devanagari script ONLY. Never translate proper names or words into English meanings.
-   Example:
-   [
-     {"text": "तुझे देखा तो ये जाना सनम", "start": 12.5, "end": 15.2},
-     {"text": "प्यार होता है दीवाना सनम", "start": 16.0, "end": 19.5}
-   ]
-   Do NOT use the audio file name as a lyric line. Only extract the ACTUAL sung words. For long instrumentals, add {"text": "🎵", "start": X, "end": Y}.
-10. **image_prompts**: A list of 10 image descriptions for AI-generated backgrounds. These images should depict the ACTUAL SUBJECT of the song — EXACTLY matching the extracted lyrics, characters, scenes, and themes. Generate images that match EACH SECTION of the song (intro, verse 1, chorus, verse 2, bridge, outro etc.) so the visuals flow with the music.
-   CRITICAL: DO NOT create generic abstract backgrounds. Create images of EXACTLY what the song lyrics are about.
-   Examples:
-   - For a Hanuman bhajan: "Majestic Lord Hanuman flying through golden clouds carrying a mountain, divine glow, epic Indian mythology art style, devotional atmosphere, highly detailed digital painting"
-   - For a Ram bhajan: "Lord Ram with bow and arrow in a beautiful forest setting, divine golden aura, Indian mythology art style, serene and powerful, epic composition"
-   - For a Krishna song: "Lord Krishna playing flute under a banyan tree, peacock feather crown, Vrindavan setting, divine blue skin, beautiful Indian art"
-   - For a romantic Bollywood song: "Beautiful couple walking hand in hand through rain in an Indian city, cinematic mood, romantic atmosphere, warm golden lighting, Bollywood style"
-   - For a sad song: "Person sitting alone by a window on a rainy night, melancholic atmosphere, soft dim lighting, emotional and cinematic, Indian setting"
-   - For a party/dance song: "Vibrant Bollywood dance scene with colorful lights, energetic crowd, neon glow, celebration, festive Indian atmosphere"
-   - Each prompt should be 40-60 words and describe a SPECIFIC visual scene related to the song
-11. **vibe_keywords**: 5-8 keywords describing the song's overall vibe (used for YouTube tags)
-12. **cta_text**: A short, highly engaging Call-To-Action (max 50 chars) for the end of the video.
-   - MUST MATCH the song's theme.
-   - CRITICAL LANGUAGE RULE: Write the CTA using a mix of Hindi (Devanagari) and English script. Always keep action words ("Like", "Subscribe", "Comment", "Share") and person/deity names in pure English script. The rest of the sentence should be in Hindi.
-   - If Devotional/Spiritual: e.g., "Shree Ram लिखकर अपनी श्रद्धा दिखाओ 🙏", "Shiva के भक्त हो तो चैनल को Subscribe करो 🙏", "अगर आप सच्चे भक्त हैं तो Like करें 🔱".
-   - If Romantic: e.g., "New love songs के लिए Like और Subscribe करें ❤️".
-   - If Party/Energetic: e.g., "Viral beats के लिए Subscribe करें 🔥".
-   - Keep it short and impactful. Do not use generic CTAs if the song has a strong theme.
+9. **vocals_start_time**: CRITICAL FIELD. Listen very carefully to the ENTIRE beginning of the song.
+   Identify the EXACT second (as a float) when the singer first sings a REAL LYRIC WORD in the actual language of the song.
+   STRICT RULES for this field:
+   - DO NOT count any of these as the start: instrumental music, background music, beats, tabla, drums, strings, flute, any instruments
+   - DO NOT count any of these as the start: aalap (आलाप), raag, humming, "aaaa", "heyyy", "ohhh", "hmm", "mmm", "la la la", any non-word vocal sounds
+   - DO NOT count any of these as the start: breath sounds, gasps, or throat clearing
+   - ONLY count: the exact moment the singer sings the FIRST ACTUAL MEANINGFUL WORD of the first verse or chorus
+   - If the song starts with instruments for 5 seconds, then "aaa aaa" for 2 more seconds, then lyrics begin at 7 seconds → vocals_start_time = 7.0
+   - If lyrics start immediately at 0 → vocals_start_time = 0.0
+   Example: If the song has 3 seconds of tabla, then 2 seconds of "aa re aa re" humming, then lyrics start at 5 seconds → return 5.0
+10. **timed_lyrics**: A list of 15-30 objects representing individual lyric lines with EXACT starting and ending timestamps in seconds. Listen closely to the audio to timestamp when the singer starts and stops singing each line. Each line should be a SHORT phrase (3-10 words max). Cover the entire song from start to end.
+    CRITICAL: Just like the `lyrics` field, this MUST be completely in Hindi Devanagari script ONLY. Never translate proper names or words into English meanings.
+    CRITICAL: The `start` of the FIRST timed_lyrics entry MUST match vocals_start_time.
+    Example:
+    [
+      {"text": "तुझे देखा तो ये जाना सनम", "start": 12.5, "end": 15.2},
+      {"text": "प्यार होता है दीवाना सनम", "start": 16.0, "end": 19.5}
+    ]
+    Do NOT use the audio file name as a lyric line. Only extract the ACTUAL sung words. For long instrumentals, add {"text": "🎵", "start": X, "end": Y}.
+11. **image_prompts**: A list of 10 image descriptions for AI-generated backgrounds. These images should depict the ACTUAL SUBJECT of the song — EXACTLY matching the extracted lyrics, characters, scenes, and themes. Generate images that match EACH SECTION of the song (intro, verse 1, chorus, verse 2, bridge, outro etc.) so the visuals flow with the music.
+    CRITICAL: DO NOT create generic abstract backgrounds. Create images of EXACTLY what the song lyrics are about.
+    Examples:
+    - For a Hanuman bhajan: "Majestic Lord Hanuman flying through golden clouds carrying a mountain, divine glow, epic Indian mythology art style, devotional atmosphere, highly detailed digital painting"
+    - For a Ram bhajan: "Lord Ram with bow and arrow in a beautiful forest setting, divine golden aura, Indian mythology art style, serene and powerful, epic composition"
+    - For a Krishna song: "Lord Krishna playing flute under a banyan tree, peacock feather crown, Vrindavan setting, divine blue skin, beautiful Indian art"
+    - For a romantic Bollywood song: "Beautiful couple walking hand in hand through rain in an Indian city, cinematic mood, romantic atmosphere, warm golden lighting, Bollywood style"
+    - For a sad song: "Person sitting alone by a window on a rainy night, melancholic atmosphere, soft dim lighting, emotional and cinematic, Indian setting"
+    - For a party/dance song: "Vibrant Bollywood dance scene with colorful lights, energetic crowd, neon glow, celebration, festive Indian atmosphere"
+    - Each prompt should be 40-60 words and describe a SPECIFIC visual scene related to the song
+12. **vibe_keywords**: 5-8 keywords describing the song's overall vibe (used for YouTube tags)
+13. **cta_text**: A short, highly engaging Call-To-Action (max 50 chars) for the end of the video.
+    - MUST MATCH the song's theme.
+    - CRITICAL LANGUAGE RULE: Write the CTA using a mix of Hindi (Devanagari) and English script. Always keep action words ("Like", "Subscribe", "Comment", "Share") and person/deity names in pure English script. The rest of the sentence should be in Hindi.
+    - If Devotional/Spiritual: e.g., "Shree Ram लिखकर अपनी श्रद्धा दिखाओ 🙏", "Shiva के भक्त हो तो चैनल को Subscribe करो 🙏", "अगर आप सच्चे भक्त हैं तो Like करें 🔱".
+    - If Romantic: e.g., "New love songs के लिए Like और Subscribe करें ❤️".
+    - If Party/Energetic: e.g., "Viral beats के लिए Subscribe करें 🔥".
+    - Keep it short and impactful. Do not use generic CTAs if the song has a strong theme.
 
 RESPOND IN THIS EXACT JSON FORMAT (no markdown, no code block, no extra text):
 {
@@ -190,6 +208,7 @@ RESPOND IN THIS EXACT JSON FORMAT (no markdown, no code block, no extra text):
   "language": "...",
   "description": "...",
   "colors": ["#hex1", "#hex2", "#hex3", "#hex4"],
+  "vocals_start_time": 0.0,
   "timed_lyrics": [
     {"text": "line1", "start": 0.0, "end": 3.5},
     {"text": "line2", "start": 4.0, "end": 7.2}

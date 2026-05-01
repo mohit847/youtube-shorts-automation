@@ -114,16 +114,71 @@ STRICT RULES:
 - NEVER pick any name from this already-used list: {used_list_str}
 
 CRITICAL REQUIREMENT:
-The song must PERFECTLY reflect the character's unique aura, personality, persona, and legendary traits. 
-Their unmatched bravery, their serene divinity, their fierce rage, or their supreme devotion MUST dictate everything from the lyrics to the musical instruments, energy, and specifically the SINGER'S VOICE.
+The song MUST perfectly reflect the character's unique aura, personality, and legendary traits.
+The music_style you generate is the SINGLE MOST IMPORTANT field — it directly controls the tempo,
+energy, instruments, and mood of the generated song. Use it to make each song feel completely
+different from the last.
+
+MUSIC STYLE GUIDE — match the character type to the appropriate energy level:
+
+  ⚔️  FIERCE WARRIORS (battle heroes, Kshatriyas, Rajput/Maratha warriors at war):
+      → 140–160 BPM, aggressive battle drums, thundering dhol, war trumpets, heavy bass,
+        intense powerful roaring male vocals, high energy, fast-paced, fierce, relentless,
+        orchestral strings in rapid staccato, feels like a war cry on a battlefield.
+        Example: "Fast-paced 150 BPM war anthem, thundering battle drums, heavy dhol, brass war trumpets,
+        powerful roaring male Indian vocals, aggressive, fierce, intense, relentless high energy, orchestral strings"
+
+  🧘  DIVINE PEACEFUL GODS (Vishnu, Ram, calm avatar forms, meditative deities):
+      → 50–70 BPM, slow gentle tempo, serene Bansuri flute, soft harmonium, light tabla,
+        warm resonant male vocals, devotional, spiritual, divine, peaceful, uplifting.
+        Example: "Slow 60 BPM devotional bhajan, serene Bansuri flute, warm harmonium, gentle tabla,
+        resonant deep male Indian vocals, peaceful, divine, uplifting, meditative, spiritual warmth"
+
+  🔱  POWERFUL DESTROYER GODS (Shiva in Rudra form, Kali, Durga in battle, Mahakaal):
+      → 100–130 BPM, dramatic, intense, deep resonant male/female chant, thunderous tabla,
+        electric sitar, drone bass, cinematic orchestral swells, raw power meets divinity,
+        feels both terrifying and awe-inspiring.
+        Example: "Intense 120 BPM Shiva chant, thunderous tabla, electric sitar, deep resonant male vocals,
+        dramatic orchestral swells, raw divine power, cinematic, awe-inspiring, powerful drone bass"
+
+  🌸  MOTHER GODDESSES / NURTURING DEITIES (Lakshmi, Saraswati, Parvati in gentle form):
+      → 40–60 BPM, very slow, soft, gentle, flute-led melody, sitar, gentle tabla,
+        sweet melodious female vocals, devotional, tender, motherly warmth, divine grace.
+        Example: "Very slow 50 BPM Saraswati bhajan, soft Bansuri flute, gentle sitar, light tabla,
+        sweet melodious female Indian vocals, tender, graceful, divine, soothing, devotional"
+
+  🦁  FREEDOM FIGHTERS / REVOLUTIONARY HEROES:
+      → 120–140 BPM, patriotic anthem style, proud march beat, snare drums, brass section,
+        powerful passionate male vocals, stirring, emotional, inspiring, rebellious energy,
+        feels like a rally cry for the nation.
+        Example: "Patriotic 130 BPM march anthem, proud snare drums, brass section, passionate powerful
+        male Indian vocals, stirring, emotional, inspiring, rebellious, nationalistic, march tempo"
+
+  🏹  EPIC MYTHOLOGICAL HEROES (Arjuna, Karna, Hanuman in battle, Parashurama):
+      → 110–140 BPM, epic cinematic style, orchestral strings, tabla, dramatic builds and drops,
+        heroic powerful male vocals, legendary, grand, mythological, larger-than-life feeling.
+        Example: "Epic 125 BPM cinematic hero anthem, orchestral strings, tabla, dramatic builds,
+        heroic powerful male Indian vocals, grand, legendary, mythological, larger-than-life"
+
+  🌿  TRIBAL / REGIONAL WARRIORS (forest warriors, indigenous heroes):
+      → 90–120 BPM, tribal folk rhythm, earthy percussion, indigenous instruments,
+        raw energetic male vocals, folk-rock energy, grounded, primal, earthy, defiant.
+        Example: "Folk-tribal 105 BPM, earthy tribal drums, indigenous percussion, raw folk male vocals,
+        primal, energetic, defiant, grounded, forest warrior energy, authentic regional folk style"
+
+  🙏  SIKH GURUS (Guru Nanak, Guru Gobind Singh, etc.):
+      → 70–100 BPM, Gurbani kirtan style, Sarangi, tabla, harmonium, peaceful yet powerful,
+        devotional, spiritual elevation, deep male vocals with reverence and strength.
+        Example: "Kirtan-inspired 85 BPM, warm harmonium, Sarangi, medium tabla, deep reverent
+        male Indian vocals, devotional, spiritually elevated, peaceful yet powerful, divine"
 
 RESPOND IN THIS EXACT JSON (no markdown, no code block):
 {{
   "name": "Full name of the identity (English transliteration)",
   "category": "Category name from the list above",
   "description": "2-3 sentences about who they are and why they are celebrated in Indian culture.",
-  "song_theme": "A vividly detailed theme for a short (< 40 second) Hindi devotional or heroic song. You MUST explicitly describe their personality, aura (e.g. fierce, divine, calming, aggressive, regal, kind-hearted), and character traits. Tell the lyricist EXACTLY how the tone should mirror the core essence of this specific identity. 3-4 sentences.",
-  "music_style": "Comma-separated MiniMax music style tags perfectly matching their personality/aura. You MUST explicitly describe the vocal style and the EXACT tempo/speed of the song (e.g. fast-paced, slow tempo). E.g. for a fierce warrior: 'Aggressive battle drums, fast tempo, heavy bass, fierce, high energy, powerful roaring male Indian vocals, pure authentic Hindi pronunciation'. For a kind-hearted mother goddess: 'Serene flute, slow soothing tempo, soft tabla, divine, calming, peaceful, sweet kind-hearted authentic female Indian vocals, absolute pure native Hindi pronunciation'."
+  "song_theme": "A vividly detailed theme for a short (< 40 second) Hindi devotional or heroic song. You MUST explicitly describe their personality, aura (e.g. fierce, divine, calming, aggressive, regal), character traits, and exactly how the tone of the song should mirror their core essence. 3-4 sentences.",
+  "music_style": "Highly specific MiniMax music style tags. MUST include: (1) Exact BPM number or range, (2) specific instruments, (3) energy level, (4) vocal character (male/female, powerful/soft/roaring/gentle), (5) overall mood. Follow the Music Style Guide above — match to the character's archetype precisely. Do NOT be generic. 40-70 words."
 }}"""
 
     models_to_try = [

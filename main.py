@@ -142,6 +142,98 @@ def list_drive_songs(creds):
           f"Remaining: {len([s for s in songs if s['name'] not in processed_names])}")
 
 
+def _trim_audio_intro(song_path, analysis, timed_lyrics, metadata):
+    """
+    Smart vocal-onset trimmer.
+
+    Strategy (in priority order):
+      1. Use `vocals_start_time` from Gemini — a dedicated field that explicitly
+         excludes instrumental music, aalap, raag, humming, and 'aaa/heyyy/ohh'
+         pre-lyric sounds.
+      2. Fall back to timed_lyrics[0]["start"] if vocals_start_time is absent.
+      3. Skip trim if vocals start within 1.0s of the beginning (no meaningful
+         pre-music to remove, and we don't want to clip very-fast starters).
+
+    Safety buffer: 0.25s is kept before the detected vocal onset so the very
+    first syllable is never clipped.
+    """
+    import subprocess
+
+    # ── 1. Determine trim point ──────────────────────────────────────────────
+    vocals_start = analysis.get("vocals_start_time")
+
+    if vocals_start is not None:
+        try:
+            vocals_start = float(vocals_start)
+            source_label = "Gemini vocals_start_time"
+        except (TypeError, ValueError):
+            vocals_start = None
+
+    if vocals_start is None and timed_lyrics and "start" in timed_lyrics[0]:
+        try:
+            vocals_start = float(timed_lyrics[0]["start"])
+            source_label = "timed_lyrics[0].start (fallback)"
+        except (TypeError, ValueError):
+            vocals_start = None
+
+    if vocals_start is None:
+        print("  ℹ️  Step 2.5: No vocal-onset data — skipping trim")
+        return False
+
+    # ── 2. Calculate how much to cut ────────────────────────────────────────
+    SAFETY_BUFFER = 0.25          # keep 0.25s before first word so it isn't clipped
+    MIN_TRIM = 1.0                # don't bother trimming less than 1 second
+
+    trim_amount = max(0.0, vocals_start - SAFETY_BUFFER)
+
+    if trim_amount < MIN_TRIM:
+        print(f"  ✅ Step 2.5: Vocals start at {vocals_start:.2f}s — no significant pre-lyric content, skipping trim")
+        return False
+
+    print(f"\n✂️  Step 2.5: Pre-lyric trim — vocals detected at {vocals_start:.2f}s (source: {source_label})")
+    print(f"  ✂️  Cutting first {trim_amount:.2f}s (keeping 0.25s safety buffer before first word)...")
+
+    # ── 3. FFmpeg trim ───────────────────────────────────────────────────────
+    # Use re-encoding (not -c copy) for frame-accurate MP3 seeking.
+    tmp_path = song_path.with_name(f"__trimtmp_{song_path.name}")
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-ss", f"{trim_amount:.3f}",
+                "-i", str(song_path),
+                "-acodec", "libmp3lame",
+                "-q:a", "2",        # VBR ~190 kbps — high quality
+                "-ar", "44100",
+                str(tmp_path)
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        tmp_path.replace(song_path)
+        print(f"  ✅ Trim complete — removed {trim_amount:.2f}s of pre-lyric content")
+    except Exception as e:
+        print(f"  ⚠️  FFmpeg trim failed (pipeline continues with original audio): {e}")
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        return False
+
+    # ── 4. Update in-memory metadata and timestamps ──────────────────────────
+    metadata["duration"] = max(0.0, metadata["duration"] - trim_amount)
+    print(f"  ℹ️  New song duration: {metadata['duration']:.1f}s")
+
+    for line in timed_lyrics:
+        line["start"] = max(0.0, line["start"] - trim_amount)
+        line["end"]   = max(0.0, line["end"]   - trim_amount)
+
+    # Also update vocals_start_time in analysis so downstream steps are consistent
+    if analysis.get("vocals_start_time") is not None:
+        analysis["vocals_start_time"] = max(0.0, float(analysis["vocals_start_time"]) - trim_amount)
+
+    return True
+
+
 def process_song(creds, song_path, no_upload=False, privacy_status="public", file_id=None, test_mode=False):
     """
     Strict fail-stop pipeline for one song:
@@ -193,41 +285,9 @@ def process_song(creds, song_path, no_upload=False, privacy_status="public", fil
     if lyric_lines:
         print(f"  📝 Caption lines: {len(lyric_lines)} lines for video")
 
-    # ── Step 2.5: Dynamically Trim Instrumental Intro ──
+    # ── Step 2.5: Smart Vocal-Onset Trim (removes pre-lyric music, aalap, raag, humming) ──
     timed_lyrics = analysis.get("timed_lyrics", [])
-    if timed_lyrics and "start" in timed_lyrics[0]:
-        first_word_start = timed_lyrics[0]["start"]
-        # Only trim if the intro is longer than 2 seconds (leave a 0.5s buffer)
-        buffer = 0.5
-        trim_amount = max(0, first_word_start - buffer)
-        
-        if trim_amount >= 1.5:
-            print(f"\n✂️  Step 2.5: Trimming {trim_amount:.1f}s of instrumental intro (Starts at {first_word_start}s)...")
-            try:
-                import subprocess
-                tmp_path = song_path.with_name(f"trimmed_{song_path.name}")
-                subprocess.run([
-                    "ffmpeg", "-y",
-                    "-i", str(song_path),
-                    "-ss", str(trim_amount),
-                    "-c", "copy",
-                    str(tmp_path)
-                ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                
-                # Replace original file with trimmed version
-                tmp_path.replace(song_path)
-                
-                # Update duration metadata
-                metadata['duration'] -= trim_amount
-                print(f"  ✂️  New duration: {metadata['duration']:.1f}s")
-                
-                # Push back all caption timestamps mathematically
-                for line in timed_lyrics:
-                    line["start"] = max(0.0, line["start"] - trim_amount)
-                    line["end"] = max(0.0, line["end"] - trim_amount)
-                    
-            except Exception as e:
-                print(f"  ⚠️  FFmpeg trim failed (skipping): {e}")
+    trim_result = _trim_audio_intro(song_path, analysis, timed_lyrics, metadata)
 
     # ── Step 3: Generate images with Nano Banana 2 ──
     print("\n🎨 Step 3/7: Generating images with Nano Banana 2...")
