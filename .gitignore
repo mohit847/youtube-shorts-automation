@@ -30,6 +30,8 @@ ENV/
 credentials/
 *.json
 !requirements.json
+# Always track the identity history so GitHub Actions can read it on every run
+!used_identities.json
 
 # Output files
 output/

@@ -10,6 +10,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        # We need write access to commit used_identities.json back
+        token: ${{ secrets.GITHUB_TOKEN }}
       
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -69,6 +72,24 @@ jobs:
         
     - name: Run automation
       run: python main.py
+
+    - name: Commit used_identities.json back to repo
+      if: always()
+      run: |
+        git config --global user.name  "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        # Pull latest to avoid conflicts if multiple runs trigger simultaneously
+        git pull --rebase --autostash || true
+        # Stage ONLY the identities log — nothing else
+        git add used_identities.json || true
+        # Only commit if the file actually changed
+        if git diff --staged --quiet; then
+          echo "No changes to used_identities.json — nothing to commit."
+        else
+          git commit -m "chore(bot): record used identity [skip ci]"
+          git push
+          echo "✅ used_identities.json committed and pushed successfully."
+        fi
       
     - name: Upload artifacts (if failed)
       if: failure()

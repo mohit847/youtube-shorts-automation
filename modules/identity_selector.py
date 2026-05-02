@@ -33,24 +33,65 @@ USED_IDENTITIES_LOG = OUTPUT_DIR / "used_identities.json"
 
 # ─── Persistence ──────────────────────────────────────────────────────────────
 
+# Also look for the log committed directly in the repo root (used as a fallback
+# when the output/ folder doesn't exist yet on a fresh GitHub Actions runner).
+_REPO_ROOT_LOG = Path(__file__).parent.parent / "used_identities.json"
+
+
 def load_used_identities() -> list:
-    """Load previously used identity entries from disk."""
+    """Load previously used identity entries from disk.
+    
+    Checks two locations in priority order:
+      1. output/used_identities.json  (primary, written each run)
+      2. used_identities.json in repo root (committed copy, always present on CI)
+    Merges both so we never lose history.
+    """
+    entries_primary = []
+    entries_root = []
+
     if USED_IDENTITIES_LOG.exists():
         try:
             with open(USED_IDENTITIES_LOG, "r", encoding="utf-8") as f:
-                return json.load(f)
+                entries_primary = json.load(f)
         except Exception:
-            return []
-    return []
+            entries_primary = []
+
+    if _REPO_ROOT_LOG.exists() and _REPO_ROOT_LOG != USED_IDENTITIES_LOG:
+        try:
+            with open(_REPO_ROOT_LOG, "r", encoding="utf-8") as f:
+                entries_root = json.load(f)
+        except Exception:
+            entries_root = []
+
+    # Merge: deduplicate by name (case-insensitive), keep all unique entries
+    seen_names: set = set()
+    merged: list = []
+    for entry in entries_root + entries_primary:
+        key = entry.get("name", "").strip().lower()
+        if key and key not in seen_names:
+            seen_names.add(key)
+            merged.append(entry)
+
+    return merged
 
 
 def save_used_identity(identity: dict) -> None:
-    """Append a newly selected identity to the log."""
+    """Append a newly selected identity to BOTH log locations."""
     entries = load_used_identities()
-    entries.append({**identity, "used_at": datetime.now().isoformat()})
+    new_entry = {**identity, "used_at": datetime.now().isoformat()}
+    entries.append(new_entry)
+
+    # Write to output/ (runtime location)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     with open(USED_IDENTITIES_LOG, "w", encoding="utf-8") as f:
         json.dump(entries, f, indent=2, ensure_ascii=False)
+
+    # Also write to repo root so git can commit it back
+    with open(_REPO_ROOT_LOG, "w", encoding="utf-8") as f:
+        json.dump(entries, f, indent=2, ensure_ascii=False)
+
+    print(f"  [Identity] Saved to: {USED_IDENTITIES_LOG}")
+    print(f"  [Identity] Saved to: {_REPO_ROOT_LOG}  ← will be committed back to git")
 
 
 # ─── Gemini selection ─────────────────────────────────────────────────────────
@@ -208,12 +249,34 @@ RESPOND IN THIS EXACT JSON (no markdown, no code block):
                 text = text[4:].strip()
 
             identity = json.loads(text)
-            
-            # ── STRICT PYTHON VALIDATION ──
+
+            # ── STRICT PYTHON FUZZY VALIDATION ──
             # Even though Gemini only knows the last 30 names, we check the ENTIRE history locally!
+            # We also do fuzzy matching to catch variants like:
+            #   "Lord Shiva" vs "Shiva" vs "Mahashiva" vs "Shiv Ji"
             generated_name = identity.get("name", "").strip().lower()
+            # Strip common honorific prefixes for core-name comparison
+            _STRIP_PREFIXES = ("lord ", "goddess ", "guru ", "rani ", "raja ", "maharaja ",
+                               "maharani ", "chhatrapati ", "sri ", "shri ", "sant ")
+            def _core_name(n: str) -> str:
+                n = n.strip().lower()
+                for pfx in _STRIP_PREFIXES:
+                    if n.startswith(pfx):
+                        n = n[len(pfx):]
+                return n
+
+            generated_core = _core_name(generated_name)
+            used_cores = [_core_name(n) for n in used_names]
+
+            # Check both exact full name AND core name (after stripping honorifics)
             if generated_name in [n.strip().lower() for n in used_names]:
-                raise ValueError(f"Identity '{identity.get('name')}' is an ancient duplicate not in the truncated prompt! Retrying...")
+                raise ValueError(
+                    f"EXACT DUPLICATE: '{identity.get('name')}' already used! Retrying with a different identity..."
+                )
+            if generated_core and generated_core in used_cores:
+                raise ValueError(
+                    f"FUZZY DUPLICATE: '{identity.get('name')}' (core: '{generated_core}') matches a previously used identity! Retrying..."
+                )
 
             # Validate required keys
             for key in ("name", "category", "description", "song_theme", "music_style"):
