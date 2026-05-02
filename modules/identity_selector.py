@@ -135,6 +135,43 @@ religion, and warrior traditions.
 
 Your task: pick ONE identity for an inspiring Hindi devotional or heroic song.
 
+════════════════════════════════════════════════════════════════
+POPULAR & DIVERSE SELECTION RULE  ← READ THIS CAREFULLY
+════════════════════════════════════════════════════════════════
+You should aim for a BALANCE. Pick heavily from popular, well-known figures
+(as guided below), as these generate maximum viewer engagement and devotion on YouTube.
+
+HOWEVER, you are ALSO free to select highly compelling, less-known heroes
+or deities that fit the ELIGIBLE CATEGORIES. These are just guidelines — use
+your vast knowledge of Indian history and mythology to select the best identity!
+
+POPULAR IDENTITIES GUIDANCE (Examples of what to look for):
+  GODS & GODDESSES:
+    Look for widely worshipped deities (e.g., major avatars of Vishnu, popular forms of Shiva, revered Goddesses, universally loved deities like Krishna or Ganesha).
+
+  EPIC / MYTHOLOGICAL HEROES:
+    Focus on central figures from the Mahabharata or Ramayana who have massive cultural resonance (e.g., major Pandavas, key allies, or complex tragic heroes).
+
+  RAJPUT & MEDIEVAL WARRIORS:
+    Select legendary kings and queens famous for their ultimate sacrifice and defiance (e.g., famous rulers of Mewar, legendary warrior queens).
+
+  MARATHA WARRIORS:
+    Focus on key founders and legendary commanders of the Maratha Empire who championed Swaraj.
+
+  SIKH GURUS & WARRIORS:
+    Choose revered Gurus or legendary Sikh commanders known for their immense bravery and spiritual leadership.
+
+  SOUTH INDIAN WARRIORS & KINGS:
+    Look for iconic emperors and resistance leaders from the South who have a massive regional following.
+
+  FREEDOM FIGHTERS:
+    Select the most famous revolutionary figures and martyrs of the Indian independence movement.
+
+  TRIBAL / REGIONAL HEROES:
+    Focus on iconic leaders of tribal uprisings who are celebrated as regional legends.
+
+════════════════════════════════════════════════════════════════
+
 ELIGIBLE CATEGORIES (choose from any):
 1. Ancient Indian Warriors (Mahabharata, Ramayana, regional kingdoms)
 2. Medieval Indian Warriors (excluding Mughal rulers and generals)
@@ -150,6 +187,7 @@ ELIGIBLE CATEGORIES (choose from any):
 
 STRICT RULES:
 - Do NOT include Mughal rulers or Mughal generals.
+- Aim for a BALANCE: Frequently use the Popular Identities Guidance to pick highly beloved figures, but also sprinkle in highly compelling heroes from the broader eligible categories.
 - Pick someone who has strong visual imagery, inspiring stories, or deep devotional significance.
 - Vary the category across runs — don't always pick gods; mix warriors, freedom fighters, etc.
 - NEVER pick any name from this already-used list: {used_list_str}
@@ -159,6 +197,7 @@ The song MUST perfectly reflect the character's unique aura, personality, and le
 The music_style you generate is the SINGLE MOST IMPORTANT field — it directly controls the tempo,
 energy, instruments, and mood of the generated song. Use it to make each song feel completely
 different from the last.
+
 
 MUSIC STYLE GUIDE — match the character type to the appropriate energy level:
 
